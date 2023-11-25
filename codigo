@@ -1,0 +1,92 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define PULSE_PER_BEAT    1           
+#define INTERRUPT_PIN     5           
+#define SAMPLING_INTERVAL 1000        
+
+volatile uint16_t pulse;              
+uint16_t count;                       
+float heartRate;                      
+float temperature;                   
+bool motionDetected = false;
+
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;  
+
+Adafruit_SSD1306 display(128, 32, &Wire, -1);
+
+void IRAM_ATTR HeartRateInterrupt() {
+  portENTER_CRITICAL_ISR(&mux);  
+  pulse++;  
+  portEXIT_CRITICAL_ISR(&mux);   
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(INTERRUPT_PIN, INPUT);
+  attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), HeartRateInterrupt, RISING);
+
+  // Inicializa o display OLED virtual
+  display.begin(SSD1306_I2C_ADDRESS, 0, 2);
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+}
+
+void loop() {
+  HeartRate();  
+  SimulateTemperature();
+  SimulateMotion();
+  UpdateDisplay();
+  delay(1000);  // Adiciona um pequeno atraso para simular o tempo entre as leituras
+}
+
+void HeartRate() {
+  static unsigned long startTime;
+  if (millis() - startTime < SAMPLING_INTERVAL) return;   
+  startTime = millis();
+
+  portENTER_CRITICAL(&mux);  
+  count = pulse;  
+  pulse = 0;
+  portEXIT_CRITICAL(&mux);   
+
+  heartRate = map(count, 0, 220, 0, 220);  
+
+  Serial.println("Heart Rate: " + String(heartRate, 2) + " BPM");
+}
+
+void SimulateTemperature() {
+  // Simula variação de temperatura entre 36.5°C e 37.5°C
+  temperature = random(365, 376) / 10.0;
+  Serial.println("Temperature: " + String(temperature, 1) + " °C");
+}
+
+void SimulateMotion() {
+  // Simula detecção de movimento
+  motionDetected = random(0, 2);
+  Serial.println("Motion Detected: " + String(motionDetected));
+}
+
+void UpdateDisplay() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+  display.print("Heart Rate: ");
+  display.print(heartRate, 2);
+  display.print(" BPM\n");
+
+  display.print("Temperature: ");
+  display.print(temperature, 1);
+  display.print(" °C\n");
+
+  display.print("Motion Detected: ");
+  display.println(motionDetected ? "Yes" : "No");
+
+  display.display();
+}
